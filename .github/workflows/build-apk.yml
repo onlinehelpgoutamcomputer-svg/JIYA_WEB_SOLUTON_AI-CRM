@@ -3,6 +3,8 @@ name: Build JIYA AI APK
 on:
   push:
     branches: [jiya-ai-apk]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 jobs:
