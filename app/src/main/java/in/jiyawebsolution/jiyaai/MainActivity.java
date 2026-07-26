@@ -33,6 +33,8 @@ public class MainActivity extends AppCompatActivity {
     private AiClient ai;
     private SharedPreferences prefs;
     private String uiLanguage;
+    private int uiThemeIndex;
+    private ThemeCatalog.Theme theme;
 
     private final ActivityResultLauncher<Intent> speechLauncher =
             registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> {
@@ -48,6 +50,8 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(state);
         prefs = SecurePrefs.get(this);
         uiLanguage = language();
+        uiThemeIndex = prefs.getInt("theme_index", 0);
+        theme = ThemeCatalog.get(uiThemeIndex);
         ai = new AiClient(this);
         tts = new TextToSpeech(this, code -> {
             if (code == TextToSpeech.SUCCESS) applyVoiceLanguage();
@@ -57,13 +61,14 @@ public class MainActivity extends AppCompatActivity {
 
     @Override protected void onResume() {
         super.onResume();
-        if (uiLanguage != null && !uiLanguage.equals(language())) recreate();
+        if (uiLanguage != null && (!uiLanguage.equals(language())
+                || uiThemeIndex != prefs.getInt("theme_index", 0))) recreate();
     }
 
     private void buildUi() {
         ScrollView scroll = new ScrollView(this);
         scroll.setFillViewport(true);
-        scroll.setBackgroundColor(UiKit.BG);
+        scroll.setBackgroundColor(theme.background);
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setPadding(dp(18), dp(14), dp(18), dp(24));
@@ -71,12 +76,12 @@ public class MainActivity extends AppCompatActivity {
 
         LinearLayout top = new LinearLayout(this);
         top.setGravity(Gravity.CENTER_VERTICAL);
-        TextView brand = label("JIYA AI", 27, UiKit.TEXT);
+        TextView brand = label("JIYA AI", 27, 0xFFF4F7FC);
         brand.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
         LinearLayout.LayoutParams brandParams = new LinearLayout.LayoutParams(0, dp(58), 1);
         top.addView(brand, brandParams);
 
-        TextView shield = chip("●  " + words("SECURE", "সুরক্ষিত", "सुरक्षित"), UiKit.GREEN);
+        TextView shield = chip("●  " + words("SECURE", "সুরক্ষিত", "सुरक्षित"), theme.success);
         top.addView(shield, new LinearLayout.LayoutParams(-2, dp(36)));
         root.addView(top);
 
@@ -84,22 +89,23 @@ public class MainActivity extends AppCompatActivity {
         hero.setOrientation(LinearLayout.VERTICAL);
         hero.setGravity(Gravity.CENTER_HORIZONTAL);
         hero.setPadding(dp(12), dp(10), dp(12), dp(14));
-        hero.setBackground(UiKit.outlined(0xFF08111F, 0xFF1C3450, 24, this));
+        hero.setBackground(UiKit.outlined(theme.panel, withAlpha(theme.primary, 105), theme.radius, this));
 
         LinearLayout heroMeta = new LinearLayout(this);
         heroMeta.setGravity(Gravity.CENTER_VERTICAL);
-        status = chip(words("ONLINE", "অনলাইন", "ऑनलाइन"), UiKit.CYAN);
-        languageBadge = chip(language(), UiKit.VIOLET);
+        status = chip(words("ONLINE", "অনলাইন", "ऑनलाइन"), theme.primary);
+        languageBadge = chip(theme.name, theme.accent);
         heroMeta.addView(status, new LinearLayout.LayoutParams(0, dp(34), 1));
         heroMeta.addView(languageBadge, new LinearLayout.LayoutParams(-2, dp(34)));
         hero.addView(heroMeta, new LinearLayout.LayoutParams(-1, dp(40)));
 
         core = new HoloCoreView(this);
+        core.setTheme(theme);
         core.setOnClickListener(v -> startListening());
         hero.addView(core, new LinearLayout.LayoutParams(-1, dp(310)));
 
         TextView coreTitle = label(words("NEURAL VOICE CORE", "নিউরাল ভয়েস কোর", "न्यूरल वॉइस कोर"),
-                12, UiKit.CYAN);
+                12, theme.primary);
         coreTitle.setGravity(Gravity.CENTER);
         coreTitle.setLetterSpacing(.12f);
         hero.addView(coreTitle, new LinearLayout.LayoutParams(-1, dp(32)));
@@ -108,30 +114,30 @@ public class MainActivity extends AppCompatActivity {
         LinearLayout responseCard = new LinearLayout(this);
         responseCard.setOrientation(LinearLayout.VERTICAL);
         responseCard.setPadding(dp(16), dp(12), dp(16), dp(14));
-        responseCard.setBackground(UiKit.outlined(UiKit.PANEL, 0xFF1B2A40, 18, this));
-        TextView responseTitle = label(words("JIYA RESPONSE", "জিয়া উত্তর", "जिया उत्तर"), 11, UiKit.VIOLET);
+        responseCard.setBackground(UiKit.outlined(theme.panel, withAlpha(theme.accent, 80), theme.radius, this));
+        TextView responseTitle = label(words("JIYA RESPONSE", "জিয়া উত্তর", "जिया उत्तर"), 11, theme.accent);
         responseTitle.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
         responseCard.addView(responseTitle, new LinearLayout.LayoutParams(-1, dp(27)));
         transcript = label(words("Ready when you are, Boss. Tap the core and speak.",
                 "প্রস্তুত আছি, Boss। কোরে ট্যাপ করে বলুন।",
-                "मैं तैयार हूँ, Boss। कोर पर टैप करके बोलिए।"), 16, UiKit.TEXT);
+                "मैं तैयार हूँ, Boss। कोर पर टैप करके बोलिए।"), 16, 0xFFF4F7FC);
         transcript.setGravity(Gravity.CENTER_VERTICAL);
         transcript.setMaxLines(5);
         responseCard.addView(transcript, new LinearLayout.LayoutParams(-1, -2));
         root.addView(responseCard, blockParams(14));
 
         Button talk = actionButton("✦  " + words("Talk to JIYA", "JIYA-কে বলুন", "JIYA से बात करें"),
-                UiKit.CYAN, UiKit.BG);
+                theme.primary, theme.background);
         talk.setOnClickListener(v -> startListening());
         root.addView(talk, buttonBlockParams(14));
 
         LinearLayout quick = new LinearLayout(this);
         quick.setGravity(Gravity.CENTER);
         Button settingsButton = actionButton("⚙  " + words("Settings", "সেটিংস", "सेटिंग्स"),
-                UiKit.PANEL_2, UiKit.CYAN);
+                theme.panelAlt, theme.primary);
         settingsButton.setOnClickListener(v -> startActivity(new Intent(this, SettingsActivity.class)));
         Button stop = actionButton("■  " + words("Stop", "বন্ধ করুন", "रोकें"),
-                0xFF26101A, UiKit.RED);
+                0xFF26101A, 0xFFFF5577);
         stop.setOnClickListener(v -> stopAutomation());
         LinearLayout.LayoutParams left = new LinearLayout.LayoutParams(0, dp(56), 1);
         left.setMargins(0, 0, dp(6), 0);
@@ -143,17 +149,18 @@ public class MainActivity extends AppCompatActivity {
 
         LinearLayout stats = new LinearLayout(this);
         stats.setGravity(Gravity.CENTER);
-        stats.addView(stat("VOICE", words("READY", "প্রস্তুত", "तैयार"), UiKit.CYAN),
+        stats.addView(stat("VOICE", words("READY", "প্রস্তুত", "तैयार"), theme.primary),
                 new LinearLayout.LayoutParams(0, dp(72), 1));
         stats.addView(stat("AI", ai.isConfigured() ? words("LINKED", "যুক্ত", "जुड़ा") :
-                        words("SETUP", "সেটআপ", "सेटअप"), UiKit.VIOLET),
+                        words("SETUP", "সেটআপ", "सेटअप"), theme.accent),
                 new LinearLayout.LayoutParams(0, dp(72), 1));
         stats.addView(stat("ACCESS", JiyaAccessibilityService.isRunning() ?
-                        words("ON", "চালু", "चालू") : words("OFF", "বন্ধ", "बंद"), UiKit.GREEN),
+                        words("ON", "চালু", "चालू") : words("OFF", "বন্ধ", "बंद"), theme.success),
                 new LinearLayout.LayoutParams(0, dp(72), 1));
         root.addView(stats, blockParams(12));
 
-        TextView footer = label("PRIVATE • ENCRYPTED • USER CONTROLLED  |  v1.1", 10, UiKit.MUTED);
+        TextView footer = label("PRIVATE • ENCRYPTED • " + theme.name.toUpperCase(Locale.ROOT) + "  |  v1.2",
+                10, 0xFF8D9AAF);
         footer.setGravity(Gravity.CENTER);
         root.addView(footer, new LinearLayout.LayoutParams(-1, dp(44)));
         setContentView(scroll);
@@ -272,8 +279,9 @@ public class MainActivity extends AppCompatActivity {
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
         box.setGravity(Gravity.CENTER);
-        box.setBackground(UiKit.outlined(UiKit.PANEL, 0xFF1B2A40, 14, this));
-        TextView first = label(title, 9, UiKit.MUTED);
+        box.setBackground(UiKit.outlined(theme.panel, withAlpha(theme.primary, 55),
+                Math.max(3, theme.radius - 5), this));
+        TextView first = label(title, 9, 0xFF8D9AAF);
         first.setGravity(Gravity.CENTER);
         TextView second = label(value, 11, color);
         second.setGravity(Gravity.CENTER);
@@ -290,7 +298,8 @@ public class MainActivity extends AppCompatActivity {
         TextView view = label(value, 11, color);
         view.setGravity(Gravity.CENTER);
         view.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
-        view.setBackground(UiKit.outlined(0xFF0A1522, color, 18, this));
+        view.setBackground(UiKit.outlined(theme.panelAlt, withAlpha(color, 160),
+                Math.max(8, theme.radius), this));
         view.setPadding(dp(13), 0, dp(13), 0);
         return view;
     }
@@ -340,6 +349,9 @@ public class MainActivity extends AppCompatActivity {
         if ("বাংলা".equals(language())) return "bn-IN";
         if ("हिन्दी".equals(language())) return "hi-IN";
         return "en-IN";
+    }
+    private int withAlpha(int color, int alpha) {
+        return (color & 0x00FFFFFF) | (Math.max(0, Math.min(255, alpha)) << 24);
     }
     private void applyVoiceLanguage() {
         Locale locale = "বাংলা".equals(language()) ? new Locale("bn", "IN")
