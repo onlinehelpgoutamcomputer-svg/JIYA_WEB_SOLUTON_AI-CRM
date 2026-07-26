@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">JIYA AI</string>
+    <string name="accessibility_description">Executes only user-approved navigation commands. It does not read passwords, OTPs, or banking content.</string>
+</resources>
