@@ -9,6 +9,7 @@ import android.view.Gravity;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.GridLayout;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.Spinner;
@@ -42,6 +43,32 @@ public class SettingsActivity extends AppCompatActivity {
         title.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
         root.addView(title);
         root.addView(text("Configure JIYA AI exactly the way you want.", 14, UiKit.MUTED));
+
+        LinearLayout displayCard = card();
+        displayCard.addView(sectionTitle("DISPLAY THEMES  •  24 DESIGNS"));
+        displayCard.addView(text("Tap any design to preview and activate it.", 13, UiKit.MUTED));
+        GridLayout gallery = new GridLayout(this);
+        gallery.setColumnCount(2);
+        gallery.setUseDefaultMargins(false);
+        for (int i = 0; i < ThemeCatalog.ALL.length; i++) {
+            final int index = i;
+            ThemeCatalog.Theme theme = ThemeCatalog.ALL[i];
+            TextView preview = themePreview(theme, i == prefs.getInt("theme_index", 0));
+            preview.setOnClickListener(v -> {
+                prefs.edit().putInt("theme_index", index).apply();
+                Toast.makeText(this, theme.name + " activated", Toast.LENGTH_SHORT).show();
+                recreate();
+            });
+            GridLayout.LayoutParams params = new GridLayout.LayoutParams();
+            params.width = 0;
+            params.height = dp(76);
+            params.columnSpec = GridLayout.spec(i % 2, 1f);
+            params.rowSpec = GridLayout.spec(i / 2);
+            params.setMargins(dp(4), dp(5), dp(4), dp(5));
+            gallery.addView(preview, params);
+        }
+        displayCard.addView(gallery, new LinearLayout.LayoutParams(-1, -2));
+        root.addView(displayCard, blockParams());
 
         LinearLayout experience = card();
         experience.addView(sectionTitle("EXPERIENCE"));
@@ -175,6 +202,26 @@ public class SettingsActivity extends AppCompatActivity {
         return view;
     }
 
+    private TextView themePreview(ThemeCatalog.Theme theme, boolean selected) {
+        TextView preview = text((selected ? "✓  " : "◉  ") + theme.name
+                + "\n" + patternName(theme.pattern), 12, 0xFFF4F7FC);
+        preview.setGravity(Gravity.CENTER_VERTICAL);
+        preview.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        preview.setPadding(dp(12), dp(7), dp(10), dp(7));
+        preview.setBackground(UiKit.outlined(theme.panel,
+                selected ? theme.primary : withAlpha(theme.accent, 105),
+                theme.radius, this));
+        preview.setCompoundDrawablesWithIntrinsicBounds(0, 0, 0, 0);
+        UiKit.pressEffect(preview);
+        return preview;
+    }
+
+    private String patternName(int pattern) {
+        String[] names = {"GRID CORE", "ORBIT CORE", "HEX CORE",
+                "RADAR CORE", "WAVE CORE", "TACTICAL CORE"};
+        return names[Math.max(0, Math.min(pattern, names.length - 1))];
+    }
+
     private LinearLayout card() {
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.VERTICAL);
@@ -214,4 +261,7 @@ public class SettingsActivity extends AppCompatActivity {
     }
 
     private int dp(int value) { return UiKit.dp(this, value); }
+    private int withAlpha(int color, int alpha) {
+        return (color & 0x00FFFFFF) | (Math.max(0, Math.min(255, alpha)) << 24);
+    }
 }
