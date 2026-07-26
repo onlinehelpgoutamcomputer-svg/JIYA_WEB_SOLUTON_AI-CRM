@@ -3,6 +3,7 @@ package in.jiyawebsolution.jiyaai;
 import android.Manifest;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.net.Uri;
@@ -14,6 +15,7 @@ import android.speech.tts.TextToSpeech;
 import android.view.Gravity;
 import android.widget.Button;
 import android.widget.LinearLayout;
+import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 import androidx.activity.result.ActivityResultLauncher;
@@ -25,10 +27,12 @@ import java.util.ArrayList;
 import java.util.Locale;
 
 public class MainActivity extends AppCompatActivity {
-    private TextView status, transcript;
+    private TextView status, transcript, languageBadge;
     private HoloCoreView core;
     private TextToSpeech tts;
     private AiClient ai;
+    private SharedPreferences prefs;
+    private String uiLanguage;
 
     private final ActivityResultLauncher<Intent> speechLauncher =
             registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> {
@@ -37,72 +41,122 @@ public class MainActivity extends AppCompatActivity {
                     ArrayList<String> matches = result.getData()
                             .getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS);
                     if (matches != null && !matches.isEmpty()) handle(matches.get(0));
-                } else setStatus("STANDBY");
+                } else setStatus(words("ONLINE", "অনলাইন", "ऑनलाइन"));
             });
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
+        prefs = SecurePrefs.get(this);
+        uiLanguage = language();
         ai = new AiClient(this);
         tts = new TextToSpeech(this, code -> {
-            if (code == TextToSpeech.SUCCESS) tts.setLanguage(new Locale("bn", "IN"));
+            if (code == TextToSpeech.SUCCESS) applyVoiceLanguage();
         });
         buildUi();
-        greet();
+    }
+
+    @Override protected void onResume() {
+        super.onResume();
+        if (uiLanguage != null && !uiLanguage.equals(language())) recreate();
     }
 
     private void buildUi() {
+        ScrollView scroll = new ScrollView(this);
+        scroll.setFillViewport(true);
+        scroll.setBackgroundColor(UiKit.BG);
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setGravity(Gravity.CENTER_HORIZONTAL);
-        root.setPadding(28, 20, 28, 20);
-        root.setBackgroundColor(0xFF050811);
+        root.setPadding(dp(18), dp(14), dp(18), dp(24));
+        scroll.addView(root, new ScrollView.LayoutParams(-1, -2));
 
         LinearLayout top = new LinearLayout(this);
         top.setGravity(Gravity.CENTER_VERTICAL);
-        TextView brand = label("JIYA AI", 25, Color.WHITE);
-        TextView security = label("●  PRIVATE MODE", 12, 0xFF65FFB1);
-        top.addView(brand, new LinearLayout.LayoutParams(0, 55, 1));
-        top.addView(security);
-        root.addView(top, new LinearLayout.LayoutParams(-1, 60));
+        TextView brand = label("JIYA AI", 27, UiKit.TEXT);
+        brand.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        LinearLayout.LayoutParams brandParams = new LinearLayout.LayoutParams(0, dp(58), 1);
+        top.addView(brand, brandParams);
 
-        status = label("SYSTEM ONLINE", 13, 0xFF35F4FF);
-        status.setGravity(Gravity.CENTER);
-        root.addView(status, new LinearLayout.LayoutParams(-1, 38));
+        TextView shield = chip("●  " + words("SECURE", "সুরক্ষিত", "सुरक्षित"), UiKit.GREEN);
+        top.addView(shield, new LinearLayout.LayoutParams(-2, dp(36)));
+        root.addView(top);
+
+        LinearLayout hero = new LinearLayout(this);
+        hero.setOrientation(LinearLayout.VERTICAL);
+        hero.setGravity(Gravity.CENTER_HORIZONTAL);
+        hero.setPadding(dp(12), dp(10), dp(12), dp(14));
+        hero.setBackground(UiKit.outlined(0xFF08111F, 0xFF1C3450, 24, this));
+
+        LinearLayout heroMeta = new LinearLayout(this);
+        heroMeta.setGravity(Gravity.CENTER_VERTICAL);
+        status = chip(words("ONLINE", "অনলাইন", "ऑनलाइन"), UiKit.CYAN);
+        languageBadge = chip(language(), UiKit.VIOLET);
+        heroMeta.addView(status, new LinearLayout.LayoutParams(0, dp(34), 1));
+        heroMeta.addView(languageBadge, new LinearLayout.LayoutParams(-2, dp(34)));
+        hero.addView(heroMeta, new LinearLayout.LayoutParams(-1, dp(40)));
 
         core = new HoloCoreView(this);
-        root.addView(core, new LinearLayout.LayoutParams(-1, 360));
-
-        transcript = label("Tap the core and speak.\nবাংলা • हिन्दी • English", 16, 0xFFCFD8E8);
-        transcript.setGravity(Gravity.CENTER);
-        transcript.setMaxLines(5);
-        root.addView(transcript, new LinearLayout.LayoutParams(-1, 95));
-
-        Button talk = neonButton("TAP TO SPEAK", 0xFF35F4FF);
-        talk.setOnClickListener(v -> startListening());
         core.setOnClickListener(v -> startListening());
-        root.addView(talk, params(64));
+        hero.addView(core, new LinearLayout.LayoutParams(-1, dp(310)));
 
-        LinearLayout actions = new LinearLayout(this);
-        actions.setGravity(Gravity.CENTER);
-        Button settingsButton = neonButton("SETTINGS", 0xFFA96BFF);
+        TextView coreTitle = label(words("NEURAL VOICE CORE", "নিউরাল ভয়েস কোর", "न्यूरल वॉइस कोर"),
+                12, UiKit.CYAN);
+        coreTitle.setGravity(Gravity.CENTER);
+        coreTitle.setLetterSpacing(.12f);
+        hero.addView(coreTitle, new LinearLayout.LayoutParams(-1, dp(32)));
+        root.addView(hero, blockParams(8));
+
+        LinearLayout responseCard = new LinearLayout(this);
+        responseCard.setOrientation(LinearLayout.VERTICAL);
+        responseCard.setPadding(dp(16), dp(12), dp(16), dp(14));
+        responseCard.setBackground(UiKit.outlined(UiKit.PANEL, 0xFF1B2A40, 18, this));
+        TextView responseTitle = label(words("JIYA RESPONSE", "জিয়া উত্তর", "जिया उत्तर"), 11, UiKit.VIOLET);
+        responseTitle.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        responseCard.addView(responseTitle, new LinearLayout.LayoutParams(-1, dp(27)));
+        transcript = label(words("Ready when you are, Boss. Tap the core and speak.",
+                "প্রস্তুত আছি, Boss। কোরে ট্যাপ করে বলুন।",
+                "मैं तैयार हूँ, Boss। कोर पर टैप करके बोलिए।"), 16, UiKit.TEXT);
+        transcript.setGravity(Gravity.CENTER_VERTICAL);
+        transcript.setMaxLines(5);
+        responseCard.addView(transcript, new LinearLayout.LayoutParams(-1, -2));
+        root.addView(responseCard, blockParams(14));
+
+        Button talk = actionButton("✦  " + words("Talk to JIYA", "JIYA-কে বলুন", "JIYA से बात करें"),
+                UiKit.CYAN, UiKit.BG);
+        talk.setOnClickListener(v -> startListening());
+        root.addView(talk, buttonBlockParams(14));
+
+        LinearLayout quick = new LinearLayout(this);
+        quick.setGravity(Gravity.CENTER);
+        Button settingsButton = actionButton("⚙  " + words("Settings", "সেটিংস", "सेटिंग्स"),
+                UiKit.PANEL_2, UiKit.CYAN);
         settingsButton.setOnClickListener(v -> startActivity(new Intent(this, SettingsActivity.class)));
-        Button stop = neonButton("EMERGENCY STOP", 0xFFFF5577);
-        stop.setOnClickListener(v -> {
-            if (tts != null) tts.stop(); core.setListening(false);
-            transcript.setText("Automation stopped."); setStatus("SAFE STOP");
-        });
-        actions.addView(settingsButton, new LinearLayout.LayoutParams(0, 58, 1));
-        actions.addView(stop, new LinearLayout.LayoutParams(0, 58, 1));
-        root.addView(actions, params(62));
+        Button stop = actionButton("■  " + words("Stop", "বন্ধ করুন", "रोकें"),
+                0xFF26101A, UiKit.RED);
+        stop.setOnClickListener(v -> stopAutomation());
+        LinearLayout.LayoutParams left = new LinearLayout.LayoutParams(0, dp(56), 1);
+        left.setMargins(0, 0, dp(6), 0);
+        LinearLayout.LayoutParams right = new LinearLayout.LayoutParams(0, dp(56), 1);
+        right.setMargins(dp(6), 0, 0, 0);
+        quick.addView(settingsButton, left);
+        quick.addView(stop, right);
+        root.addView(quick, blockParams(12));
 
-        TextView footer = label("Local permission control  •  Encrypted API keys  •  v1.0", 11, 0xFF718098);
+        LinearLayout stats = new LinearLayout(this);
+        stats.setGravity(Gravity.CENTER);
+        stats.addView(stat("VOICE", words("READY", "প্রস্তুত", "तैयार"), UiKit.CYAN),
+                new LinearLayout.LayoutParams(0, dp(72), 1));
+        stats.addView(stat("AI", ai.isConfigured() ? words("LINKED", "যুক্ত", "जुड़ा") :
+                        words("SETUP", "সেটআপ", "सेटअप"), UiKit.VIOLET),
+                new LinearLayout.LayoutParams(0, dp(72), 1));
+        stats.addView(stat("ACCESS", JiyaAccessibilityService.isRunning() ?
+                        words("ON", "চালু", "चालू") : words("OFF", "বন্ধ", "बंद"), UiKit.GREEN),
+                new LinearLayout.LayoutParams(0, dp(72), 1));
+        root.addView(stats, blockParams(12));
+
+        TextView footer = label("PRIVATE • ENCRYPTED • USER CONTROLLED  |  v1.1", 10, UiKit.MUTED);
         footer.setGravity(Gravity.CENTER);
-        root.addView(footer, params(40));
-        setContentView(root);
-    }
-
-    private void greet() {
-        transcript.setText("Hello Boss! JIYA AI is ready. আজ কী কাজ করব?");
+        root.addView(footer, new LinearLayout.LayoutParams(-1, dp(44)));
+        setContentView(scroll);
     }
 
     private void startListening() {
@@ -113,10 +167,12 @@ public class MainActivity extends AppCompatActivity {
         }
         Intent intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
         intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
-        intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, "bn-IN");
-        intent.putExtra(RecognizerIntent.EXTRA_PROMPT, "Boss, বলুন...");
+        intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, speechLocale());
+        intent.putExtra(RecognizerIntent.EXTRA_PROMPT,
+                words("Speak now, Boss…", "Boss, বলুন…", "Boss, बोलिए…"));
         try {
-            core.setListening(true); setStatus("LISTENING");
+            core.setListening(true);
+            setStatus(words("LISTENING", "শুনছি", "सुन रही हूँ"));
             speechLauncher.launch(intent);
         } catch (ActivityNotFoundException e) {
             Toast.makeText(this, "Install Google Speech Services", Toast.LENGTH_LONG).show();
@@ -124,49 +180,74 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void handle(String command) {
-        transcript.setText("YOU: " + command);
-        String c = command.toLowerCase(Locale.ROOT);
-        if (contains(c, "সেটিং", "setting")) {
-            act("Open system settings?", () -> startActivity(new Intent(Settings.ACTION_SETTINGS)));
-        } else if (contains(c, "ক্যামেরা", "camera")) {
-            act("Open camera?", () -> startActivity(new Intent(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA)));
-        } else if (contains(c, "হোয়াটসঅ্যাপ", "whatsapp")) {
-            act("Open WhatsApp?", () -> openPackage("com.whatsapp"));
-        } else if (contains(c, "ইউটিউব", "youtube")) {
-            act("Open YouTube?", () -> openPackage("com.google.android.youtube"));
-        } else if (contains(c, "বাড়ি", "home")) {
+        transcript.setText(words("YOU: ", "আপনি: ", "आप: ") + command);
+        String value = command.toLowerCase(Locale.ROOT);
+        if (contains(value, "সেটিং", "setting", "सेटिंग")) {
+            confirm(words("Open system settings?", "System settings খুলব?", "System settings खोलूँ?"),
+                    () -> startActivity(new Intent(Settings.ACTION_SETTINGS)));
+        } else if (contains(value, "ক্যামেরা", "camera", "कैमरा")) {
+            confirm(words("Open camera?", "Camera খুলব?", "Camera खोलूँ?"),
+                    () -> startActivity(new Intent(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA)));
+        } else if (contains(value, "হোয়াটসঅ্যাপ", "whatsapp", "व्हाट्सऐप")) {
+            confirm(words("Open WhatsApp?", "WhatsApp খুলব?", "WhatsApp खोलूँ?"),
+                    () -> openPackage("com.whatsapp"));
+        } else if (contains(value, "ইউটিউব", "youtube", "यूट्यूब")) {
+            confirm(words("Open YouTube?", "YouTube খুলব?", "YouTube खोलूँ?"),
+                    () -> openPackage("com.google.android.youtube"));
+        } else if (contains(value, "বাড়ি", "home", "होम")) {
             if (!JiyaAccessibilityService.goHome()) accessibilityHint();
-        } else if (contains(c, "পিছনে", "back")) {
+        } else if (contains(value, "পিছনে", "back", "पीछे")) {
             if (!JiyaAccessibilityService.goBack()) accessibilityHint();
-        } else if (contains(c, "রিসেন্ট", "recent")) {
+        } else if (contains(value, "রিসেন্ট", "recent", "रीसेंट")) {
             if (!JiyaAccessibilityService.openRecents()) accessibilityHint();
-        } else if (contains(c, "কল কর", "call")) {
-            String number = c.replaceAll("[^0-9+]", "");
-            if (number.length() >= 7) act("Prepare call to " + number + "?",
+        } else if (contains(value, "কল কর", "call", "कॉल")) {
+            String number = value.replaceAll("[^0-9+]", "");
+            if (number.length() >= 7) confirm(words("Prepare call to ", "Call প্রস্তুত করব: ", "Call तैयार करूँ: ") + number + "?",
                     () -> startActivity(new Intent(Intent.ACTION_DIAL, Uri.parse("tel:" + number))));
-            else reply("নম্বরটি বলুন বা লিখুন—আমি dial screen খুলব, কল আপনি confirm করবেন।");
+            else reply(words("Tell me the phone number. I will open the dial screen for your confirmation.",
+                    "ফোন নম্বরটি বলুন। আপনার confirmation-এর জন্য dial screen খুলব।",
+                    "फ़ोन नंबर बताइए। Confirmation के लिए dial screen खोलूँगी।"));
         } else askAi(command);
     }
 
     private void askAi(String command) {
         if (!ai.isConfigured()) {
-            reply("Boss, Settings-এ আপনার AI provider এবং API key যোগ করুন।");
+            reply(words("Open Settings and add your AI provider and API key.",
+                    "Settings-এ AI provider এবং API key যোগ করুন।",
+                    "Settings में AI provider और API key जोड़ें।"));
             return;
         }
-        setStatus("AI THINKING");
+        setStatus(words("THINKING", "ভাবছি", "सोच रही हूँ"));
         ai.ask(command, (answer, error) -> runOnUiThread(() -> {
             if (error != null) reply("Connection problem: " + error.getMessage());
             else reply(answer);
         }));
     }
 
-    private void act(String question, Runnable action) {
-        new AlertDialog.Builder(this).setTitle("JIYA AI confirmation")
-                .setMessage(question).setNegativeButton("Cancel", null)
-                .setPositiveButton("Allow once", (d, w) -> {
-                    try { action.run(); reply("Done, Boss."); }
-                    catch (Exception e) { reply("I could not complete that action."); }
-                }).show();
+    private void confirm(String question, Runnable action) {
+        new AlertDialog.Builder(this)
+                .setTitle("JIYA AI")
+                .setMessage(question)
+                .setNegativeButton(words("Cancel", "বাতিল", "रद्द करें"), null)
+                .setPositiveButton(words("Allow once", "একবার অনুমতি", "एक बार अनुमति"),
+                        (dialog, which) -> {
+                            try {
+                                action.run();
+                                reply(words("Done, Boss.", "হয়ে গেছে, Boss।", "हो गया, Boss।"));
+                            } catch (Exception e) {
+                                reply(words("I could not complete that action.",
+                                        "কাজটি সম্পন্ন করা যায়নি।", "यह काम पूरा नहीं हो सका।"));
+                            }
+                        }).show();
+    }
+
+    private void stopAutomation() {
+        if (tts != null) tts.stop();
+        core.setListening(false);
+        transcript.setText(words("All active JIYA actions have stopped.",
+                "JIYA-এর সব চলমান কাজ বন্ধ হয়েছে।",
+                "JIYA की सभी चल रही कार्रवाइयाँ रुक गई हैं।"));
+        setStatus(words("SAFE STOP", "নিরাপদ বন্ধ", "सुरक्षित बंद"));
     }
 
     private void openPackage(String packageName) {
@@ -174,32 +255,107 @@ public class MainActivity extends AppCompatActivity {
         if (launch == null) throw new IllegalStateException("App not installed");
         startActivity(launch);
     }
+
     private void accessibilityHint() {
-        reply("Navigation permission is off. Open Settings and enable JIYA AI Accessibility.");
+        reply(words("Navigation access is off. Enable JIYA AI in Accessibility settings.",
+                "Navigation access বন্ধ। Accessibility settings-এ JIYA AI চালু করুন।",
+                "Navigation access बंद है। Accessibility settings में JIYA AI चालू करें।"));
     }
+
     private void reply(String value) {
-        transcript.setText("JIYA: " + value); setStatus("SYSTEM ONLINE");
+        transcript.setText("JIYA: " + value);
+        setStatus(words("ONLINE", "অনলাইন", "ऑनलाइन"));
         if (tts != null) tts.speak(value, TextToSpeech.QUEUE_FLUSH, null, "jiya_reply");
     }
+
+    private LinearLayout stat(String title, String value, int color) {
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setGravity(Gravity.CENTER);
+        box.setBackground(UiKit.outlined(UiKit.PANEL, 0xFF1B2A40, 14, this));
+        TextView first = label(title, 9, UiKit.MUTED);
+        first.setGravity(Gravity.CENTER);
+        TextView second = label(value, 11, color);
+        second.setGravity(Gravity.CENTER);
+        second.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        box.addView(first, new LinearLayout.LayoutParams(-1, dp(28)));
+        box.addView(second, new LinearLayout.LayoutParams(-1, dp(26)));
+        LinearLayout.LayoutParams margin = new LinearLayout.LayoutParams(-1, -1);
+        margin.setMargins(dp(3), 0, dp(3), 0);
+        box.setLayoutParams(margin);
+        return box;
+    }
+
+    private TextView chip(String value, int color) {
+        TextView view = label(value, 11, color);
+        view.setGravity(Gravity.CENTER);
+        view.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        view.setBackground(UiKit.outlined(0xFF0A1522, color, 18, this));
+        view.setPadding(dp(13), 0, dp(13), 0);
+        return view;
+    }
+
+    private Button actionButton(String value, int background, int text) {
+        Button button = new Button(this);
+        button.setText(value);
+        UiKit.styleButton(button, background, text, this);
+        UiKit.pressEffect(button);
+        return button;
+    }
+
+    private TextView label(String value, int size, int color) {
+        TextView view = new TextView(this);
+        view.setText(value);
+        view.setTextSize(size);
+        view.setTextColor(color);
+        view.setGravity(Gravity.CENTER_VERTICAL);
+        return view;
+    }
+
+    private LinearLayout.LayoutParams blockParams(int top) {
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, -2);
+        params.setMargins(0, dp(top), 0, 0);
+        return params;
+    }
+
+    private LinearLayout.LayoutParams buttonBlockParams(int top) {
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, dp(58));
+        params.setMargins(0, dp(top), 0, 0);
+        return params;
+    }
+
     private void setStatus(String value) { status.setText(value); }
-    private boolean contains(String text, String... options) {
-        for (String option : options) if (text.contains(option)) return true;
+    private boolean contains(String value, String... options) {
+        for (String option : options) if (value.contains(option)) return true;
         return false;
     }
-    private TextView label(String value, int size, int color) {
-        TextView v = new TextView(this); v.setText(value); v.setTextSize(size);
-        v.setTextColor(color); v.setGravity(Gravity.CENTER_VERTICAL); return v;
+
+    private String language() { return prefs.getString("language", "English"); }
+    private String words(String english, String bengali, String hindi) {
+        if ("বাংলা".equals(language())) return bengali;
+        if ("हिन्दी".equals(language())) return hindi;
+        return english;
     }
-    private Button neonButton(String value, int color) {
-        Button b = new Button(this); b.setText(value); b.setTextColor(Color.BLACK);
-        b.setTextSize(13); b.setBackgroundColor(color); return b;
+    private String speechLocale() {
+        if ("বাংলা".equals(language())) return "bn-IN";
+        if ("हिन्दी".equals(language())) return "hi-IN";
+        return "en-IN";
     }
-    private LinearLayout.LayoutParams params(int height) {
-        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-1, height);
-        p.setMargins(4, 4, 4, 4); return p;
+    private void applyVoiceLanguage() {
+        Locale locale = "বাংলা".equals(language()) ? new Locale("bn", "IN")
+                : "हिन्दी".equals(language()) ? new Locale("hi", "IN")
+                : new Locale("en", "IN");
+        tts.setLanguage(locale);
+        tts.setPitch(1.08f);
+        tts.setSpeechRate(.94f);
     }
+    private int dp(int value) { return UiKit.dp(this, value); }
+
     @Override protected void onDestroy() {
-        if (tts != null) { tts.stop(); tts.shutdown(); }
+        if (tts != null) {
+            tts.stop();
+            tts.shutdown();
+        }
         super.onDestroy();
     }
 }
